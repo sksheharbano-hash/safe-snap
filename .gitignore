@@ -1,0 +1,74 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Model weights (large binaries)
+# model.pt is kept — it's the project's face detector
+# but exclude downloaded InsightFace models
+
+# Streamlit
+.streamlit/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# Outputs (generated images — keep .gitkeep)
+outputs/*.png
+outputs/*.jpg
+outputs/*.jpeg
+
+# Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Logs
+*.log
+
+# Private / personal images — never commit real faces
+sample_images/*.jpg
+sample_images/*.png
+test_images/*.jpg
+test_images/*.png
+
+# model
+model.pt
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
