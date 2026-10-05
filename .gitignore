@@ -44,9 +44,6 @@ sample_images/*.png
 test_images/*.jpg
 test_images/*.png
 
-# model
-model.pt
-
 # Logs
 logs
 *.log

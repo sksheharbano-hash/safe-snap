@@ -13,7 +13,6 @@ env/
 # model.pt is kept — it's the project's face detector
 # but exclude downloaded InsightFace models
 
-model.pt
 .jpg
 PS_and_Solution.pdf
 

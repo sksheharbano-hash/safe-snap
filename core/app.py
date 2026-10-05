@@ -181,6 +181,7 @@ def _init_session_state() -> None:
         "processed_image": None,
         "original_image": None,
         "timings": {},
+        "camera_captured_frames": [],  # captured webcam frames for enrollment
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -337,7 +338,47 @@ if detector is None or recognizer is None:
 # ===========================================================================
 st.markdown('<div class="ss-section-title">👤 Owner Enrollment</div>', unsafe_allow_html=True)
 
-with st.container():
+# Extra CSS for camera section
+st.markdown(
+    """
+    <style>
+    .cam-hint {
+        font-size: 0.82rem;
+        color: #9ca3af;
+        margin-top: 0.4rem;
+        text-align: center;
+    }
+    .cam-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(96,165,250,0.12);
+        border: 1px solid rgba(96,165,250,0.30);
+        border-radius: 20px;
+        padding: 3px 12px;
+        font-size: 0.80rem;
+        color: #60a5fa;
+        font-weight: 500;
+    }
+    .cam-preview-label {
+        font-size: 0.85rem;
+        color: #a78bfa;
+        font-weight: 600;
+        margin-bottom: 4px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+enroll_tab_upload, enroll_tab_camera = st.tabs(
+    ["📁 Upload Reference Photos", "📷 Live Camera Capture"]
+)
+
+# ------------------------------------------------------------------
+# TAB A: File upload (original behaviour)
+# ------------------------------------------------------------------
+with enroll_tab_upload:
     st.markdown(
         "_Upload 1–3 clear, single-person reference photos of the owner.  "
         "More references improve recognition accuracy under different lighting / poses._"
@@ -354,14 +395,15 @@ with st.container():
             )
             ref_files.append(f)
 
-    enroll_btn = st.button("🔐 Enroll Owner", type="primary", use_container_width=True)
+    enroll_btn = st.button(
+        "🔐 Enroll Owner", type="primary", use_container_width=True, key="enroll_upload_btn"
+    )
 
     if enroll_btn:
         uploaded_refs = [f for f in ref_files if f is not None]
         if not uploaded_refs:
             st.warning("Please upload at least one reference image before enrolling.")
         else:
-            # Reset previous enrollment
             st.session_state["owner_recognizer"] = OwnerRecognizer()
             st.session_state["enrollment_done"] = False
             owner_rec = st.session_state["owner_recognizer"]
@@ -398,6 +440,147 @@ with st.container():
                 )
             else:
                 st.error("Enrollment failed for all uploaded images. Please try different photos.")
+
+# ------------------------------------------------------------------
+# TAB B: Live Camera Capture
+# ------------------------------------------------------------------
+with enroll_tab_camera:
+    st.markdown(
+        "_Point your camera at your face and click **Capture** below.  "
+        "You can take up to **3 snapshots** from different angles for better accuracy._"
+    )
+    st.markdown(
+        '<span class="cam-badge">🔒 All processing is local — your camera feed is never sent anywhere</span>',
+        unsafe_allow_html=True,
+    )
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Tips row
+    tip1, tip2, tip3 = st.columns(3)
+    with tip1:
+        st.markdown(
+            '<div class="ss-card" style="text-align:center;">'
+            "<div style='font-size:1.6rem'>💡</div>"
+            "<div style='font-size:0.80rem;color:#9ca3af;margin-top:4px;'>Good lighting on your face</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+    with tip2:
+        st.markdown(
+            '<div class="ss-card" style="text-align:center;">'
+            "<div style='font-size:1.6rem'>🎯</div>"
+            "<div style='font-size:0.80rem;color:#9ca3af;margin-top:4px;'>Center your face in the frame</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+    with tip3:
+        st.markdown(
+            '<div class="ss-card" style="text-align:center;">'
+            "<div style='font-size:1.6rem'>🔄</div>"
+            "<div style='font-size:0.80rem;color:#9ca3af;margin-top:4px;'>Vary angle/expression slightly</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+    # Camera widget
+    cam_image = st.camera_input(
+        "Point camera at your face, then click the capture button",
+        key="cam_capture_widget",
+        label_visibility="collapsed",
+    )
+
+    cam_col1, cam_col2 = st.columns([1, 1])
+    with cam_col1:
+        add_frame_btn = st.button(
+            "➕ Add Snapshot to Queue",
+            use_container_width=True,
+            key="cam_add_btn",
+            disabled=(cam_image is None),
+        )
+    with cam_col2:
+        clear_cam_btn = st.button(
+            "🗑️ Clear Snapshots",
+            use_container_width=True,
+            key="cam_clear_btn",
+        )
+
+    if clear_cam_btn:
+        st.session_state["camera_captured_frames"] = []
+        st.success("Snapshots cleared.")
+
+    if add_frame_btn and cam_image is not None:
+        frames: list = st.session_state["camera_captured_frames"]
+        if len(frames) >= 3:
+            st.warning("Maximum 3 snapshots reached. Clear some before adding more.")
+        else:
+            # Convert the captured bytes to a numpy BGR array
+            try:
+                pil_cam = Image.open(cam_image).convert("RGB")
+                bgr_cam = pil_to_bgr(pil_cam)
+                frames.append(bgr_cam)
+                st.session_state["camera_captured_frames"] = frames
+                st.success(f"📸 Snapshot #{len(frames)} added to queue.")
+            except Exception as exc:
+                st.error(f"Could not read camera frame: {exc}")
+
+    # Preview captured snapshots
+    frames: list = st.session_state.get("camera_captured_frames", [])
+    if frames:
+        st.markdown(
+            f'<div class="cam-preview-label">📋 Snapshot Queue ({len(frames)}/3 captured)</div>',
+            unsafe_allow_html=True,
+        )
+        prev_cols = st.columns(len(frames))
+        for i, (col, frame) in enumerate(zip(prev_cols, frames), start=1):
+            with col:
+                rgb_preview = frame[..., ::-1]  # BGR → RGB
+                st.image(rgb_preview, caption=f"Snapshot #{i}", use_container_width=True)
+
+    # Enroll from camera button
+    cam_enroll_btn = st.button(
+        "🔐 Enroll from Camera Snapshots",
+        type="primary",
+        use_container_width=True,
+        key="cam_enroll_btn",
+        disabled=(len(frames) == 0),
+    )
+
+    if cam_enroll_btn:
+        frames = st.session_state.get("camera_captured_frames", [])
+        if not frames:
+            st.warning("No snapshots in queue. Please capture at least one photo.")
+        else:
+            st.session_state["owner_recognizer"] = OwnerRecognizer()
+            st.session_state["enrollment_done"] = False
+            owner_rec = st.session_state["owner_recognizer"]
+
+            logger.info("Starting camera-based enrollment with %d snapshot(s)...", len(frames))
+            success_count = 0
+            with st.spinner("Enrolling from camera snapshots…"):
+                for idx, bgr_frame in enumerate(frames, start=1):
+                    logger.info("Processing camera snapshot #%d...", idx)
+                    result = enroll_image(
+                        bgr_frame, detector, recognizer, owner_rec,
+                        confidence_threshold=det_conf,
+                    )
+                    if result.success:
+                        st.success(f"Snapshot {idx}: {result.message}")
+                        success_count += 1
+                    else:
+                        st.error(f"Snapshot {idx}: {result.message}")
+
+            if success_count > 0:
+                st.session_state["enrollment_done"] = True
+                st.info(
+                    f"✅ Owner enrolled from {success_count} camera snapshot(s). "
+                    "You can now process a group photo."
+                )
+                st.session_state["camera_captured_frames"] = []  # clear queue
+            else:
+                st.error(
+                    "Enrollment failed for all snapshots. "
+                    "Ensure your face is clearly visible, well-lit, and centred."
+                )
 
 st.markdown('<hr class="ss-divider">', unsafe_allow_html=True)
 
